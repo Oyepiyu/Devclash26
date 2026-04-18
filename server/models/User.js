@@ -49,6 +49,28 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  intent: {
+    type: String,
+    enum: ['professional', 'organisation'],
+    default: null,
+  },
+  orgOnboardingStage: {
+    type: Number,
+    default: 1,
+  },
+  organisationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organisation',
+    default: null,
+  },
+  orgRole: {
+    type: String,
+    default: '',
+  },
+  orgProof: {
+    type: String,
+    default: '',
+  },
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

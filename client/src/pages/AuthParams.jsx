@@ -25,7 +25,7 @@ const AuthParams = ({ type, setUser }) => {
 
   const performAuth = async () => {
     setLoading(true);
-    const url = `http://localhost:5000/api/auth/${isLogin ? 'login' : 'register'}`;
+    const url = `https://happily-launder-spearman.ngrok-free.dev/api/auth/${isLogin ? 'login' : 'register'}`;
     
     try {
       const response = await fetch(url, {

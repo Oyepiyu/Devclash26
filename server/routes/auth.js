@@ -47,7 +47,9 @@ router.post('/register', async (req, res) => {
         isVerified: newUser.isVerified,
         faceVerified: newUser.faceVerified,
         documentVerified: newUser.documentVerified,
-        trustScore: newUser.trustScore
+        trustScore: newUser.trustScore,
+        intent: newUser.intent,
+        orgOnboardingStage: newUser.orgOnboardingStage
       }
     });
   } catch (error) {
@@ -91,7 +93,9 @@ router.post('/login', async (req, res) => {
         isVerified: user.isVerified,
         faceVerified: user.faceVerified,
         documentVerified: user.documentVerified,
-        trustScore: user.trustScore
+        trustScore: user.trustScore,
+        intent: user.intent,
+        orgOnboardingStage: user.orgOnboardingStage
       }
     });
 
@@ -111,9 +115,42 @@ router.get('/me', authMiddleware, (req, res) => {
       isVerified: req.user.isVerified,
       faceVerified: req.user.faceVerified,
       documentVerified: req.user.documentVerified,
-      trustScore: req.user.trustScore
+      trustScore: req.user.trustScore,
+      intent: req.user.intent,
+      orgOnboardingStage: req.user.orgOnboardingStage
     }
   });
+});
+
+// Update User Intent
+router.put('/intent', authMiddleware, async (req, res) => {
+  try {
+    const { intent } = req.body;
+    if (!['professional', 'organisation'].includes(intent)) {
+      return res.status(400).json({ message: 'Invalid intent selection' });
+    }
+    
+    req.user.intent = intent;
+    await req.user.save();
+    
+    res.json({
+      message: 'Intent updated successfully',
+      user: {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        isVerified: req.user.isVerified,
+        faceVerified: req.user.faceVerified,
+        documentVerified: req.user.documentVerified,
+        trustScore: req.user.trustScore,
+        intent: req.user.intent,
+        orgOnboardingStage: req.user.orgOnboardingStage
+      }
+    });
+  } catch (error) {
+    console.error('Update Intent Error:', error);
+    res.status(500).json({ message: 'Server error updating intent' });
+  }
 });
 
 module.exports = router;

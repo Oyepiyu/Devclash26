@@ -4,14 +4,25 @@ import Navbar from './components/Navbar';
 import AuthParams from './pages/AuthParams';
 import Verification from './pages/Verification';
 import DocumentVerification from './pages/DocumentVerification';
-import Dashboard from './pages/Dashboard';
+import Welcome from './pages/Welcome';
+import ProfessionalDashboard from './pages/ProfessionalDashboard';
+import OrganisationDashboard from './pages/OrganisationDashboard';
+import OrganisationOnboarding from './pages/onboarding/OrganisationOnboarding';
+import Stage1BasicDetails from './pages/onboarding/Stage1BasicDetails';
+import Stage2RoleClaim from './pages/onboarding/Stage2RoleClaim';
+import Stage3DocumentUpload from './pages/onboarding/Stage3DocumentUpload';
+import Stage4DomainVerification from './pages/onboarding/Stage4DomainVerification';
 
 // Helper: determine which page a user should be on
 function getUserRoute(user) {
   if (!user) return '/login';
   if (!user.faceVerified) return '/verify';
   if (!user.documentVerified) return '/verify-document';
-  return '/dashboard';
+  if (!user.intent) return '/welcome';
+  if (user.intent === 'organisation' && user.orgOnboardingStage < 5) {
+    return `/onboarding/stage${user.orgOnboardingStage}`;
+  }
+  return `/dashboard/${user.intent}`;
 }
 
 function App() {
@@ -23,7 +34,7 @@ function App() {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const response = await fetch('http://localhost:5000/api/auth/me', {
+          const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/auth/me', {
             headers: { Authorization: `Bearer ${token}` }
           });
           const data = await response.json();
@@ -75,11 +86,44 @@ function App() {
                  : <Navigate to="/login" />
           } />
           
-          {/* Dashboard (only for fully verified users) */}
-          <Route path="/dashboard" element={
-            user ? (user.isVerified ? <Dashboard user={user} /> : <Navigate to={target} />) 
+          {/* Welcome Screen */}
+          <Route path="/welcome" element={
+            user ? (user.faceVerified && user.documentVerified && !user.intent 
+              ? <Welcome user={user} setUser={setUser} /> 
+              : <Navigate to={target} />) 
                  : <Navigate to="/login" />
           } />
+          
+          {/* Dashboards */}
+          <Route path="/dashboard/professional" element={
+            user ? (user.faceVerified && user.documentVerified && user.intent === 'professional' 
+              ? <ProfessionalDashboard user={user} setUser={setUser} /> 
+              : <Navigate to={target} />) 
+                 : <Navigate to="/login" />
+          } />
+
+          <Route path="/dashboard/organisation" element={
+            user ? (user.faceVerified && user.documentVerified && user.intent === 'organisation' && user.orgOnboardingStage >= 3
+              ? <OrganisationDashboard user={user} setUser={setUser} /> 
+              : <Navigate to={target} />) 
+                 : <Navigate to="/login" />
+          } />
+
+          {/* Organisation Onboarding Stages */}
+          <Route path="/onboarding" element={<OrganisationOnboarding user={user} setUser={setUser} />}>
+            <Route path="stage1" element={
+              user?.orgOnboardingStage === 1 ? <Stage1BasicDetails user={user} setUser={setUser} /> : <Navigate to={target} />
+            } />
+            <Route path="stage2" element={
+              user?.orgOnboardingStage === 2 ? <Stage2RoleClaim user={user} setUser={setUser} /> : <Navigate to={target} />
+            } />
+            <Route path="stage3" element={
+              user?.orgOnboardingStage === 3 ? <Stage3DocumentUpload user={user} setUser={setUser} /> : <Navigate to={target} />
+            } />
+            <Route path="stage4" element={
+              user?.orgOnboardingStage === 4 ? <Stage4DomainVerification user={user} setUser={setUser} /> : <Navigate to={target} />
+            } />
+          </Route>
         </Routes>
       </main>
     </BrowserRouter>
