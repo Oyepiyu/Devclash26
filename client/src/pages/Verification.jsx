@@ -10,13 +10,25 @@ const Verification = ({ user, setUser }) => {
   const [livenessStage, setLivenessStage] = useState('LOADING_MODELS');
   const [errorCard, setErrorCard] = useState(null);
   const [trustScore, setTrustScore] = useState(0);
+
+  // Pool of possible actions (Blink removed per user request)
+  const ACTION_POOL = [
+    { id: 'left', label: '↩️ Turn your head LEFT', check: (ratio) => ratio > 1.25 },
+    { id: 'right', label: '↪️ Turn your head RIGHT', check: (ratio) => ratio < 0.8 },
+    { id: 'smile', label: '😊 Now... SMILE big', check: (_, smileRatio) => smileRatio > 0.38 },
+    { id: 'up', label: '⬆️ Look UP at the ceiling', check: (_, __, upRatio) => upRatio < 0.38 },
+  ];
+
+  const [sequence, setSequence] = useState([]);
+  const [currentStepUI, setCurrentStepUI] = useState(0);
+  const [debugStats, setDebugStats] = useState({ smile: 0, up: 0, head: 0 });
   
   const livenessVars = useRef({
-    leftDone: false,
-    rightDone: false,
-    blinkCount: 0,
-    eyesClosed: false,
     faceEmbedding: null,
+    sequence: [],
+    currentStep: 0,
+    isProcessingStep: false,
+    lastStepTime: 0
   });
 
   const stageRef = useRef('LOADING_MODELS');
@@ -26,22 +38,28 @@ const Verification = ({ user, setUser }) => {
     stageRef.current = livenessStage;
   }, [livenessStage]);
 
-  // Load Models - TinyFaceDetector for SPEED, SSD+Recognition only for final embedding
+  // Load Models and INITIALIZE RANDOM SEQUENCE
   useEffect(() => {
     const loadModels = async () => {
       try {
-        setStatus('Loading models...');
+        setStatus('Calibrating high-accuracy sensors...');
+        
+        // Pick 3 random actions
+        const shuffled = [...ACTION_POOL].sort(() => 0.5 - Math.random());
+        const picked = shuffled.slice(0, 3);
+        setSequence(picked);
+        livenessVars.current.sequence = picked;
+
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
           faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
           faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
           faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
         ]);
-        console.log('All models loaded');
+        console.log('High-accuracy models loaded');
         startVideo();
       } catch (err) {
         console.error('Model load failed:', err);
-        setErrorCard("Failed to load models. Please refresh.");
+        setErrorCard("Biometric initialization failed. Please refresh.");
       }
     };
     loadModels();
@@ -70,28 +88,19 @@ const Verification = ({ user, setUser }) => {
 
   const handleVideoPlaying = () => {
     setLivenessStage('DETECT');
-    setStatus('Detecting face...');
-    setTimeout(() => processLiveness(), 300);
+    setTimeout(() => processLiveness(), 500);
   };
 
-  const getEAR = (eye) => {
-    const p = eye;
-    const v1 = Math.hypot(p[1].x - p[5].x, p[1].y - p[5].y);
-    const v2 = Math.hypot(p[2].x - p[4].x, p[2].y - p[4].y);
-    const h = Math.hypot(p[0].x - p[3].x, p[0].y - p[3].y);
-    return (v1 + v2) / (2.0 * h);
-  };
-
-  // --- FAST liveness loop using TinyFaceDetector ---
+  // --- DYNAMIC Liveness Loop (HIGH ACCURACY SSD MODE) ---
   const processLiveness = async () => {
     const currentStage = stageRef.current;
-    if (currentStage === 'SUCCESS' || currentStage === 'SUBMITTING' || currentStage === 'DOTS' || currentStage === 'ERROR' || currentStage === 'EXTRACTING') return;
+    if (['SUCCESS', 'SUBMITTING', 'DOTS', 'ERROR', 'EXTRACTING'].includes(currentStage)) return;
 
     if (videoRef.current && !videoRef.current.paused) {
-      // TinyFaceDetector is ~10x faster than SSD
+      // Switched to SsdMobilenetv1 (High Accuracy) for the main loop
       const detection = await faceapi.detectSingleFace(
         videoRef.current, 
-        new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 })
+        new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 })
       ).withFaceLandmarks();
 
       if (detection) {
@@ -103,79 +112,85 @@ const Verification = ({ user, setUser }) => {
 
         const leftDist = Math.hypot(nose.x - leftJaw.x, nose.y - leftJaw.y);
         const rightDist = Math.hypot(nose.x - rightJaw.x, nose.y - rightJaw.y);
-        const ratio = leftDist / rightDist;
+        // Head turn ratio
+        const headRatio = Number((leftDist / rightDist).toFixed(2));
 
-        if (!livenessVars.current.leftDone) {
-          setStatus('↩️ Turn your head LEFT');
-          if (ratio > 1.3) {
-            livenessVars.current.leftDone = true;
-          }
-        } else if (!livenessVars.current.rightDone) {
-          setStatus('↪️ Turn your head RIGHT');
-          if (ratio < 0.77) { // inverse of 1.3
-            livenessVars.current.rightDone = true;
-          }
-        } else if (livenessVars.current.blinkCount < 1) {
-          setStatus('👁️ Please BLINK');
+        // Smile detection
+        const mouth = landmarks.getMouth();
+        const mouthWidth = Math.hypot(mouth[0].x - mouth[6].x, mouth[0].y - mouth[6].y);
+        const faceWidth = Math.hypot(leftJaw.x - rightJaw.x, leftJaw.y - rightJaw.y);
+        const smileRatio = Number((mouthWidth / faceWidth).toFixed(2));
+
+        // LookUp detection
+        const noseTop = landmarks.getNose()[0];
+        const noseBottom = landmarks.getNose()[6];
+        const chin = jawline[8];
+        const noseToChin = Math.abs(chin.y - noseBottom.y);
+        const noseLength = Math.abs(noseBottom.y - noseTop.y);
+        const upRatio = Number((noseLength / noseToChin).toFixed(2));
+
+        // Update Debug Stats
+        setDebugStats({ smile: smileRatio, up: upRatio, head: headRatio });
+
+        const currentIdx = livenessVars.current.currentStep;
+        const seq = livenessVars.current.sequence;
+
+        if (currentIdx < seq.length) {
+          const action = seq[currentIdx];
+          setStatus(`Step ${currentIdx + 1}/3: ${action.label}`);
           
-          const leftEAR = getEAR(landmarks.getLeftEye());
-          const rightEAR = getEAR(landmarks.getRightEye());
-          const avgEAR = (leftEAR + rightEAR) / 2.0;
-
-          if (avgEAR < 0.24) {
-            livenessVars.current.eyesClosed = true;
-          } else if (avgEAR > 0.28 && livenessVars.current.eyesClosed) {
-            livenessVars.current.eyesClosed = false;
-            livenessVars.current.blinkCount += 1;
+          if (action.check(headRatio, smileRatio, upRatio)) {
+            if (Date.now() - livenessVars.current.lastStepTime > 1200) {
+              livenessVars.current.currentStep += 1;
+              livenessVars.current.lastStepTime = Date.now();
+              setCurrentStepUI(livenessVars.current.currentStep);
+              setStatus('Keep holding... verified!');
+            }
           }
         } else {
-          // All liveness passed → extract embedding (slower, one-time)
           setLivenessStage('EXTRACTING');
-          setStatus('Extracting identity...');
-          await extractEmbedding();
-          return;
+          setStatus('Identity verified. Capturing signature...');
+          
+          // Use current descriptor from SSD
+          const fullDetection = await faceapi.detectSingleFace(
+            videoRef.current, 
+            new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
+          ).withFaceLandmarks().withFaceDescriptor();
+
+          if (fullDetection) {
+            livenessVars.current.faceEmbedding = Array.from(fullDetection.descriptor);
+            setLivenessStage('DOTS');
+            setStatus('Perfect! Complete visual test:');
+            generateDots();
+            return;
+          }
         }
       } else {
-        setStatus('Hold still... detecting face');
+        setStatus('Looking for face...');
       }
     }
 
-    // Fast loop ~100ms
-    setTimeout(processLiveness, 100);
+    // SSD is slower, so we loop at ~200ms
+    setTimeout(processLiveness, 200);
   };
 
-  // --- ACCURATE embedding extraction using SsdMobilenetv1 (called only ONCE) ---
   const extractEmbedding = async () => {
     if (!videoRef.current) return;
 
-    // Use SSD (more accurate) for the final identity extraction
     const fullDetection = await faceapi.detectSingleFace(
       videoRef.current, 
-      new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 })
+      new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 })
     ).withFaceLandmarks().withFaceDescriptor();
 
     if (fullDetection) {
       livenessVars.current.faceEmbedding = Array.from(fullDetection.descriptor);
       setLivenessStage('DOTS');
-      setStatus('Almost done...');
+      setStatus('Success! Complete the test:');
       generateDots();
     } else {
-      // Fallback: try with TinyFaceDetector if SSD fails
-      const fallback = await faceapi.detectSingleFace(
-        videoRef.current, 
-        new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.2 })
-      ).withFaceLandmarks().withFaceDescriptor();
-
-      if (fallback) {
-        livenessVars.current.faceEmbedding = Array.from(fallback.descriptor);
-        setLivenessStage('DOTS');
-        setStatus('Almost done...');
-        generateDots();
-      } else {
-        setStatus('Face lost. Look at camera...');
-        setLivenessStage('DETECT');
-        setTimeout(processLiveness, 500);
-      }
+      setStatus('Scan unstable. Look at camera...');
+      setLivenessStage('DETECT');
+      setTimeout(processLiveness, 500);
     }
   };
 
@@ -201,7 +216,7 @@ const Verification = ({ user, setUser }) => {
 
   const submitVerification = async () => {
     setLivenessStage('SUBMITTING');
-    setStatus('Verifying identity...');
+    setStatus('Finalizing authentication...');
     setErrorCard(null);
 
     const token = localStorage.getItem('token');
@@ -219,12 +234,10 @@ const Verification = ({ user, setUser }) => {
 
       if (response.ok) {
         setLivenessStage('SUCCESS');
-        setStatus('✅ Human verified');
-        
+        setStatus('✅ Biometrics verified');
         if (videoRef.current && videoRef.current.srcObject) {
-           videoRef.current.srcObject.getTracks().forEach(t => t.stop());
+            videoRef.current.srcObject.getTracks().forEach(t => t.stop());
         }
-
         let score = 0;
         const interval = setInterval(() => {
           score += 2;
@@ -251,25 +264,29 @@ const Verification = ({ user, setUser }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }} className="fade-in">
-      
-      <div style={{ marginBottom: '2rem', padding: '1rem', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--primary-accent)', borderRadius: '8px', maxWidth: '500px' }}>
-        <h3 style={{ margin: 0, color: 'var(--primary-accent)' }}>"To ensure a trusted community, we verify all users as real humans."</h3>
+      <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--primary-accent)', borderRadius: '12px', maxWidth: '600px' }}>
+        <h3 style={{ margin: 0, color: 'var(--primary-accent)', fontSize: '1.1rem' }}>Step 1: Adaptive Biometric Challenge</h3>
+        <p style={{ marginTop: '0.5rem', marginBottom: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>Follow the random actions to prove you are a live human.</p>
       </div>
 
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', position: 'relative' }}>
-        
-        <div className="webcam-container">
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', position: 'relative', padding: '2rem' }}>
+        <div className="webcam-container" style={{ borderRadius: '16px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.1)' }}>
+          {/* Live Debug Calibrator */}
+          <div style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: 'rgba(0,0,0,0.6)', padding: '8px', borderRadius: '4px', fontSize: '0.7rem', color: '#fff', zIndex: 10, textAlign: 'left', pointerEvents: 'none' }}>
+            <div>Smile: {debugStats.smile} (Target: {">"}0.38)</div>
+            <div>Look: {debugStats.up} (Target: {"<"}0.38)</div>
+            <div>Head: {debugStats.head} (Target: L{">"}1.25, R{"<"}0.8)</div>
+          </div>
+
           {['LOADING_MODELS', 'DETECT', 'EXTRACTING'].includes(livenessStage) && <div className="progress-ring"></div>}
-          
           <video 
             ref={videoRef} 
             onPlay={handleVideoPlaying} 
             muted 
             autoPlay 
             playsInline
-            style={{ transform: 'scaleX(-1)' }}
+            style={{ transform: 'scaleX(-1)', width: '100%', display: 'block' }}
           />
-
           {livenessStage === 'DOTS' && dotsConfig && (
             <div className="cognitive-test-overlay">
               <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -277,17 +294,19 @@ const Verification = ({ user, setUser }) => {
                   <div 
                     key={i} 
                     onClick={() => handleDotClick(i)}
+                    className="test-dot"
                     style={{
                       position: 'absolute',
                       left: `${dot.x}%`,
                       top: `${dot.y}%`,
-                      width: '30px',
-                      height: '30px',
+                      width: '32px',
+                      height: '32px',
                       borderRadius: '50%',
                       backgroundColor: i === dotsConfig.targetIndex ? '#ef4444' : '#f8fafc',
                       cursor: 'pointer',
                       transform: 'translate(-50%, -50%)',
-                      boxShadow: i === dotsConfig.targetIndex ? '0 0 12px rgba(239,68,68,0.6)' : '0 0 8px rgba(255,255,255,0.3)'
+                      boxShadow: i === dotsConfig.targetIndex ? '0 0 15px rgba(239,68,68,0.8)' : '0 0 8px rgba(255,255,255,0.4)',
+                      transition: 'all 0.2s',
                     }}
                   />
                 ))}
@@ -295,22 +314,18 @@ const Verification = ({ user, setUser }) => {
             </div>
           )}
         </div>
-
-        <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>{status}</h2>
-        
+        <h2 style={{ fontSize: '1.4rem', marginTop: '1.5rem', color: livenessStage === 'ERROR' ? '#ef4444' : 'inherit' }}>{status}</h2>
         {livenessStage === 'SUCCESS' && (
           <div className="slide-up">
-            <p style={{ color: 'var(--text-muted)' }}>Trust Score Updated</p>
-            <p style={{ fontSize: '3rem', fontWeight: 'bold', color: 'var(--success)' }}>{trustScore}</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Trust Score Initialized</p>
+            <p style={{ fontSize: '3.5rem', fontWeight: 'bold', color: 'var(--success)', margin: 0 }}>{trustScore}</p>
           </div>
         )}
-
         {errorCard && (
-          <div className="status-card error slide-up" style={{ marginTop: '2rem' }}>
+          <div className="status-card error slide-up" style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', borderRadius: '8px', color: '#ef4444' }}>
             {errorCard}
           </div>
         )}
-
       </div>
     </div>
   );

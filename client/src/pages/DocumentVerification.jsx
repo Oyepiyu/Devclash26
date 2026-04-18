@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileCheck, AlertCircle, Shield } from 'lucide-react';
+import * as faceapi from 'face-api.js';
 
 const DocumentVerification = ({ user, setUser }) => {
   const navigate = useNavigate();
@@ -12,6 +13,24 @@ const DocumentVerification = ({ user, setUser }) => {
   const [errorCard, setErrorCard] = useState(null);
   const [trustScore, setTrustScore] = useState(40);
   const [success, setSuccess] = useState(false);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+
+  // Load face-api models on mount to mathematically compare ID face with webcam face
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
+          faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
+          faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+        ]);
+        setModelsLoaded(true);
+      } catch (err) {
+        console.error('Document ML model load failed:', err);
+      }
+    };
+    loadModels();
+  }, []);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
@@ -46,20 +65,61 @@ const DocumentVerification = ({ user, setUser }) => {
       setErrorCard('Please upload an identity document');
       return;
     }
+    if (!modelsLoaded) {
+      setErrorCard('Security models are still loading. Please wait a moment.');
+      return;
+    }
 
     setLoading(true);
-    setStatus('Uploading document...');
+    setStatus('Extracting Face from Document for Match...');
 
-    const data = new FormData();
-    data.append('fullName', formData.fullName);
-    data.append('dob', formData.dob);
-    data.append('age', formData.age);
-    data.append('document', file);
-
-    const token = localStorage.getItem('token');
+    let documentFaceEmbedding = null;
 
     try {
-      setStatus('Running OCR on document...');
+      // 1) Extract Face from Document at HIGHEST PRECISION
+      const fullResImg = await faceapi.fetchImage(preview);
+      
+      // Stage A: Detect face location
+      const detection = await faceapi.detectSingleFace(
+        fullResImg, 
+        new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 })
+      ).withFaceLandmarks();
+
+      if (!detection) {
+        setErrorCard('Verification Failed: Could not detect a clear human face on this document.');
+        setLoading(false);
+        setStatus('');
+        return;
+      }
+
+      // Stage B: Precision Crop (Isolates face from ID text/noise)
+      const regions = detection.detection.box;
+      const canvas = document.createElement('canvas');
+      canvas.width = 150;
+      canvas.height = 150;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(
+        fullResImg, 
+        regions.x, regions.y, regions.width, regions.height, 
+        0, 0, 150, 150
+      );
+
+      // Stage C: Final Embedding from Clean Crop
+      const finalExtraction = await faceapi.computeFaceDescriptor(canvas);
+      
+      console.log(`[TrustLink Client v4.5] Precision Embedding Extracted.`);
+      documentFaceEmbedding = Array.from(finalExtraction);
+
+      setStatus('Running Global Verification...');
+      
+      const data = new FormData();
+      data.append('fullName', formData.fullName);
+      data.append('dob', formData.dob);
+      data.append('age', formData.age);
+      data.append('document', file);
+      data.append('documentFaceEmbedding', JSON.stringify(documentFaceEmbedding));
+
+      const token = localStorage.getItem('token');
       
       const response = await fetch('http://localhost:5000/api/verify-document', {
         method: 'POST',
@@ -72,15 +132,18 @@ const DocumentVerification = ({ user, setUser }) => {
       const result = await response.json();
 
       if (response.ok) {
-        setStatus('✅ Document verified!');
+        setStatus('✅ Document seamlessly matched!');
         setSuccess(true);
 
-        // Animate trust score 40 -> 60
+        // Animate trust score sequentially based on backend evaluation
         let score = 40;
+        const targetScore = result.user.trustScore; // Will be 60 normally, 50 if high-profile
+        
         const interval = setInterval(() => {
-          score += 1;
-          setTrustScore(score);
-          if (score >= 60) {
+          if (score < targetScore) {
+            score += 1;
+            setTrustScore(score);
+          } else {
             clearInterval(interval);
             setTimeout(() => {
               setUser(result.user);
@@ -92,14 +155,14 @@ const DocumentVerification = ({ user, setUser }) => {
         setStatus('');
         setErrorCard(result.message || 'Document verification failed');
         
-        // If verification failed, redirect to home after showing error
         setTimeout(() => {
           localStorage.removeItem('token');
           setUser(null);
           navigate('/');
-        }, 3000);
+        }, 4000);
       }
     } catch (err) {
+      console.error(err);
       setStatus('');
       setErrorCard('Server error. Please try again.');
       setTimeout(() => {
@@ -113,7 +176,6 @@ const DocumentVerification = ({ user, setUser }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }} className="fade-in">
       
-      {/* Step indicator */}
       <div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.5 }}>
           <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.85rem' }}>✓</div>
@@ -185,7 +247,6 @@ const DocumentVerification = ({ user, setUser }) => {
             </div>
           </div>
 
-          {/* File Upload */}
           <div>
             <label className="label">Upload Identity Document</label>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', margin: '0 0 8px 0' }}>
@@ -209,7 +270,7 @@ const DocumentVerification = ({ user, setUser }) => {
               }}
             >
               {preview ? (
-                <img src={preview} alt="Document preview" style={{ maxHeight: '120px', maxWidth: '100%', borderRadius: '8px', objectFit: 'contain' }} />
+                <img id="doc-preview-img" src={preview} alt="Document preview" style={{ maxHeight: '120px', maxWidth: '100%', borderRadius: '8px', objectFit: 'contain' }} crossOrigin="anonymous" />
               ) : (
                 <Upload size={32} color="var(--text-muted)" />
               )}
@@ -228,20 +289,21 @@ const DocumentVerification = ({ user, setUser }) => {
 
           <button 
             type="submit" 
-            disabled={loading || success}
+            disabled={loading || success || !modelsLoaded}
             style={{ marginTop: '0.5rem' }}
           >
             {loading ? (
               <>Processing...</>
             ) : success ? (
               <><FileCheck size={18} /> Verified!</>
+            ) : !modelsLoaded ? (
+              <>Loading Face Engine...</>
             ) : (
-              <><FileCheck size={18} /> Verify Document</>
+              <><FileCheck size={18} /> Verify Identity</>
             )}
           </button>
         </form>
 
-        {/* Trust Score Display */}
         {success && (
           <div className="slide-up" style={{ textAlign: 'center', marginTop: '1.5rem' }}>
             <p style={{ color: 'var(--text-muted)', margin: '0 0 4px 0' }}>Trust Score</p>
