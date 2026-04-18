@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Briefcase, Building2, ChevronRight, Loader2 } from 'lucide-react';
+import { API_URL } from '../apiConfig';
 
 function Welcome({ user, setUser }) {
   const [loading, setLoading] = useState(null);
@@ -10,7 +11,7 @@ function Welcome({ user, setUser }) {
     setLoading(intentSelected);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/auth/intent', {
+      const response = await fetch(`${API_URL}/auth/intent`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Shield } from 'lucide-react';
+import { API_URL } from '../../apiConfig';
 
 const Stage3DocumentUpload = ({ user, setUser }) => {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ const Stage3DocumentUpload = ({ user, setUser }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/organisation/stage3', {
+      const response = await fetch(`${API_URL}/organisation/stage3`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

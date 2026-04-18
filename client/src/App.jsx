@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { API_URL } from './apiConfig';
 import Navbar from './components/Navbar';
 import AuthParams from './pages/AuthParams';
 import Verification from './pages/Verification';
@@ -34,7 +35,7 @@ function App() {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/auth/me', {
+          const response = await fetch(`${API_URL}/auth/me`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           const data = await response.json();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as faceapi from 'face-api.js';
+import { API_URL } from '../apiConfig';
 
 const Verification = ({ user, setUser }) => {
   const navigate = useNavigate();
@@ -38,15 +39,18 @@ const Verification = ({ user, setUser }) => {
     stageRef.current = livenessStage;
   }, [livenessStage]);
 
-  // Load Models and INITIALIZE RANDOM SEQUENCE
+  // Load Models and INITIALIZE FIXED SEQUENCE (Simplified per user request: Right + Smile)
   useEffect(() => {
     const loadModels = async () => {
       try {
         setStatus('Calibrating high-accuracy sensors...');
         
-        // Pick 3 random actions
-        const shuffled = [...ACTION_POOL].sort(() => 0.5 - Math.random());
-        const picked = shuffled.slice(0, 3);
+        // Task: Just look right and smile
+        const picked = [
+          ACTION_POOL.find(a => a.id === 'right'),
+          ACTION_POOL.find(a => a.id === 'smile')
+        ];
+        
         setSequence(picked);
         livenessVars.current.sequence = picked;
 
@@ -137,7 +141,7 @@ const Verification = ({ user, setUser }) => {
 
         if (currentIdx < seq.length) {
           const action = seq[currentIdx];
-          setStatus(`Step ${currentIdx + 1}/3: ${action.label}`);
+          setStatus(`Step ${currentIdx + 1}/${seq.length}: ${action.label}`);
           
           if (action.check(headRatio, smileRatio, upRatio)) {
             if (Date.now() - livenessVars.current.lastStepTime > 1200) {
@@ -221,7 +225,7 @@ const Verification = ({ user, setUser }) => {
 
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/verify-face', {
+      const response = await fetch(`${API_URL}/verify-face`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

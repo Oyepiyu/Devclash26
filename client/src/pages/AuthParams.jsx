@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { API_URL } from '../apiConfig';
 import CaptchaChallenge from '../components/CaptchaChallenge';
 
 const AuthParams = ({ type, setUser }) => {
@@ -25,7 +26,7 @@ const AuthParams = ({ type, setUser }) => {
 
   const performAuth = async () => {
     setLoading(true);
-    const url = `https://happily-launder-spearman.ngrok-free.dev/api/auth/${isLogin ? 'login' : 'register'}`;
+    const url = `${API_URL}/auth/${isLogin ? 'login' : 'register'}`;
     
     try {
       const response = await fetch(url, {

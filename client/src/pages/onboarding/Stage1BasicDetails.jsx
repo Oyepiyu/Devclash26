@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MapPin, Globe, Loader2, IndianRupee } from 'lucide-react';
+import { API_URL } from '../../apiConfig';
 
 const Stage1BasicDetails = ({ user, setUser }) => {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ const Stage1BasicDetails = ({ user, setUser }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/organisation/stage1', {
+      const response = await fetch(`${API_URL}/organisation/stage1`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

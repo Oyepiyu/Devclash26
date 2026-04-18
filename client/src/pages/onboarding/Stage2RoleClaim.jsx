@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserCheck, ShieldCheck, FileText, AlertTriangle, Loader2, ChevronRight } from 'lucide-react';
+import { API_URL } from '../../apiConfig';
 
 const Stage2RoleClaim = ({ user, setUser }) => {
   const navigate = useNavigate();
@@ -60,7 +61,7 @@ const Stage2RoleClaim = ({ user, setUser }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/organisation/stage2', {
+      const response = await fetch(`${API_URL}/organisation/stage2`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

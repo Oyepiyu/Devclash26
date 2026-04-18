@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileCheck, AlertCircle, Shield } from 'lucide-react';
 import * as faceapi from 'face-api.js';
+import { API_URL } from '../apiConfig';
 
 const DocumentVerification = ({ user, setUser }) => {
   const navigate = useNavigate();
@@ -121,7 +122,7 @@ const DocumentVerification = ({ user, setUser }) => {
 
       const token = localStorage.getItem('token');
       
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/verify-document', {
+      const response = await fetch(`${API_URL}/verify-document`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

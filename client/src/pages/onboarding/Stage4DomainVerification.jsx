@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, ShieldCheck, Loader2, Send, CheckCircle2 } from 'lucide-react';
+import { API_URL } from '../../apiConfig';
 
 const Stage4DomainVerification = ({ user, setUser }) => {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ const Stage4DomainVerification = ({ user, setUser }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/organisation/stage4/send-otp', {
+      const response = await fetch(`${API_URL}/organisation/stage4/send-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,7 +51,7 @@ const Stage4DomainVerification = ({ user, setUser }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/organisation/stage4/verify-otp', {
+      const response = await fetch(`${API_URL}/organisation/stage4/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

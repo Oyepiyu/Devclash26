@@ -231,6 +231,140 @@ router.post('/stage4/send-otp', authMiddleware, async (req, res) => {
   }
 });
 
+// TASK 1: GSTIN VERIFICATION
+router.post('/verify-gstin', authMiddleware, async (req, res) => {
+  try {
+    const { gstin, companyName } = req.body;
+    
+    // Task requirement: Validate gstin is exactly 15 characters
+    if (!gstin || gstin.length !== 15) {
+      return res.status(200).json({ valid: false, reason: 'GSTIN must be exactly 15 characters' });
+    }
+
+    // Task requirement: Check for valid 2-digit state code (01-38)
+    const stateCode = parseInt(gstin.substring(0, 2));
+    if (isNaN(stateCode) || stateCode < 1 || stateCode > 38) {
+      return res.status(200).json({ valid: false, reason: 'Invalid state code in GSTIN' });
+    }
+
+    // Task requirement: Return valid for now with fallback=true (API integration planned for production)
+    return res.status(200).json({ 
+      valid: true, 
+      apiCompanyName: companyName,
+      fallback: true,
+      message: 'Self-validation pass. Live API check will happen during manual review.'
+    });
+
+  } catch (error) {
+    console.error('GSTIN Verify Error:', error);
+    res.status(500).json({ valid: false, reason: 'Verification service unavailable. Document will be reviewed manually.', fallback: true });
+  }
+});
+
+// TASK 2: BEHAVIORAL FLAGS
+router.post('/check-flags', authMiddleware, async (req, res) => {
+  try {
+    const { companyName, gstFileUrl } = req.body;
+    const flags = [];
+
+    // Check 1: Account age (< 10 minutes)
+    const user = await User.findById(req.user._id);
+    const accountAgeMinutes = (Date.now() - user.createdAt) / 60000;
+    if (accountAgeMinutes < 10) {
+      flags.push('Account created less than 10 minutes ago');
+    }
+
+    // Check 2: Famous brand similarity
+    const famousBrands = ['tata', 'infosys', 'wipro', 'reliance', 'google', 'microsoft', 'amazon', 'flipkart', 'hdfc', 'icici', 'bajaj', 'mahindra', 'accenture', 'deloitte'];
+    const lowerName = companyName.toLowerCase();
+    if (famousBrands.some(brand => lowerName.includes(brand))) {
+      flags.push('Company name similar to well-known brand');
+    }
+
+    // Check 3: Duplicate document
+    if (gstFileUrl) {
+      const duplicateDoc = await Organisation.findOne({
+        'documents.fileUrl': gstFileUrl,
+        ownerId: { $ne: req.user._id }
+      });
+      if (duplicateDoc) {
+        flags.push('Document already used by another account');
+      }
+    }
+
+    res.status(200).json({ 
+      flags, 
+      requiresManualReview: flags.length > 0 
+    });
+
+  } catch (error) {
+    console.error('Flags Check Error:', error);
+    res.status(500).json({ message: 'Internal server error checking security flags' });
+  }
+});
+
+// TASK 9: GET my-org
+router.get('/my-org', authMiddleware, async (req, res) => {
+  try {
+    const org = await Organisation.findOne({ ownerId: req.user._id });
+    if (!org) {
+      return res.status(404).json({ message: 'Organisation not found' });
+    }
+    res.status(200).json({ organisation: org });
+  } catch (error) {
+    console.error('Fetch My Org Error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ADMIN: Get all flagged organisations
+router.get('/flagged', authMiddleware, async (req, res) => {
+  try {
+    // Only allow specific superuser to see this
+    if (req.user.email !== 'priyanshu.s.rathi@gmail.com') {
+      return res.status(403).json({ message: 'Access denied: Superuser privileges required' });
+    }
+
+    const flaggedOrgs = await Organisation.find({
+      $or: [
+        { verificationStatus: 'Pending' },
+        { trustScore: { $lt: 40 } }
+      ]
+    }).populate('ownerId', 'name email createdAt');
+
+    res.status(200).json({ organisations: flaggedOrgs });
+  } catch (error) {
+    console.error('Fetch Flagged Orgs Error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// ADMIN: Approve/Reject action
+router.post('/admin-action', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.email !== 'priyanshu.s.rathi@gmail.com') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const { orgId, action, reason } = req.body;
+    const status = action === 'APPROVE' ? 'Verified' : 'Rejected';
+
+    const updatedOrg = await Organisation.findByIdAndUpdate(
+      orgId,
+      { 
+        verificationStatus: status,
+        // We use $set to add the suspendedReason dynamically as requested in blueprint
+        $set: { suspendedReason: reason } 
+      },
+      { new: true }
+    );
+
+    res.status(200).json({ success: true, organisation: updatedOrg });
+  } catch (error) {
+    res.status(500).json({ message: 'Admin action failed' });
+  }
+});
+
 router.post('/stage4/verify-otp', authMiddleware, async (req, res) => {
   try {
     const { otp } = req.body;
