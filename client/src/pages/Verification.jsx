@@ -221,7 +221,7 @@ const Verification = ({ user, setUser }) => {
 
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch('http://localhost:5000/api/verify-face', {
+      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/verify-face', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

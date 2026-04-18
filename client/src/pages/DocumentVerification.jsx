@@ -121,7 +121,7 @@ const DocumentVerification = ({ user, setUser }) => {
 
       const token = localStorage.getItem('token');
       
-      const response = await fetch('http://localhost:5000/api/verify-document', {
+      const response = await fetch('https://happily-launder-spearman.ngrok-free.dev/api/verify-document', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
