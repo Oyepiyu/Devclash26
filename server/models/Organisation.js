@@ -16,6 +16,9 @@ const organisationSchema = new mongoose.Schema({
   linkedin: { type: String },
   email: { type: String },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  verifiedOwnerStatus: { type: String, enum: ['pending', 'domain_verified', 'verified'], default: 'pending' },
+  authorisedReps: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  walletBalance: { type: Number, default: 0 },
   trustScore: { type: Number, default: 0 },
   verificationStatus: { type: String, enum: ['Pending', 'Verified', 'Fully Verified', 'Rejected'], default: 'Pending' },
   documents: [{
@@ -28,7 +31,14 @@ const organisationSchema = new mongoose.Schema({
   domainEmail: { type: String },
   domainVerified: { type: Boolean, default: false },
   otp: { type: String },
-  otpExpires: { type: Date }
+  otpExpires: { type: Date },
+  
+  // Event Trust Metrics
+  eventsHosted: { type: Number, default: 0 },
+  eventsCancelled: { type: Number, default: 0 },
+  eventRatingAvg: { type: Number, default: 0 },
+  disputeRate: { type: Number, default: 0 },
+  isFirstPaidEvent: { type: Boolean, default: true }
 }, { timestamps: true });
 
 const Organisation = mongoose.model('Organisation', organisationSchema);

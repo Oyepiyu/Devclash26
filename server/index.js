@@ -4,9 +4,16 @@ const cors = require('cors');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
-const verifyRoutes = require('./routes/verify');
 const documentRoutes = require('./routes/document');
+const auditRoutes = require('./routes/audit');
+const reportRoutes = require('./routes/report');
+const professionalRoutes = require('./routes/professional');
 const organisationRoutes = require('./routes/organisation');
+const feedRoutes = require('./routes/feed');
+const jobRoutes = require('./routes/jobs');
+const eventRoutes = require('./routes/events');
+const networkRoutes = require('./routes/network');
+const investmentRoutes = require('./routes/investment');
 
 const app = express();
 
@@ -17,13 +24,15 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api', verifyRoutes);
-app.use('/api', documentRoutes);
-app.use('/api/organisation', organisationRoutes);
-const reportRoutes = require('./routes/report');
-app.use('/api/report', reportRoutes);
-const auditRoutes = require('./routes/audit');
 app.use('/api/audit', auditRoutes);
+app.use('/api/report', reportRoutes);
+app.use('/api/professional', professionalRoutes);
+app.use('/api/organisation', organisationRoutes);
+app.use('/api/feed', feedRoutes);
+app.use('/api/jobs', jobRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/network', networkRoutes);
+app.use('/api/investment', investmentRoutes);
 
 // Global Error Handler (catches Multer filter errors)
 app.use((err, req, res, next) => {

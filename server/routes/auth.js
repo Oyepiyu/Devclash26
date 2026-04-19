@@ -48,6 +48,7 @@ router.post('/register', async (req, res) => {
         faceVerified: newUser.faceVerified,
         documentVerified: newUser.documentVerified,
         trustScore: newUser.trustScore,
+        walletBalance: newUser.walletBalance,
         intent: newUser.intent,
         orgOnboardingStage: newUser.orgOnboardingStage
       }
@@ -94,6 +95,7 @@ router.post('/login', async (req, res) => {
         faceVerified: user.faceVerified,
         documentVerified: user.documentVerified,
         trustScore: user.trustScore,
+        walletBalance: user.walletBalance,
         intent: user.intent,
         orgOnboardingStage: user.orgOnboardingStage
       }
@@ -116,6 +118,7 @@ router.get('/me', authMiddleware, (req, res) => {
       faceVerified: req.user.faceVerified,
       documentVerified: req.user.documentVerified,
       trustScore: req.user.trustScore,
+      walletBalance: req.user.walletBalance,
       intent: req.user.intent,
       orgOnboardingStage: req.user.orgOnboardingStage
     }
@@ -143,6 +146,7 @@ router.put('/intent', authMiddleware, async (req, res) => {
         faceVerified: req.user.faceVerified,
         documentVerified: req.user.documentVerified,
         trustScore: req.user.trustScore,
+        walletBalance: req.user.walletBalance,
         intent: req.user.intent,
         orgOnboardingStage: req.user.orgOnboardingStage
       }
@@ -151,6 +155,31 @@ router.put('/intent', authMiddleware, async (req, res) => {
     console.error('Update Intent Error:', error);
     res.status(500).json({ message: 'Server error updating intent' });
   }
+});
+
+// 5. Update role (For Dev/Testing)
+router.patch('/update-role', authMiddleware, async (req, res) => {
+  console.log(`[DEV] Attempting role switch for user: ${req.user.email} to role: ${req.body.role}`);
+  try {
+    const { role } = req.body;
+    if (!['professional', 'organisation_owner', 'investor'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+    const user = await User.findById(req.user._id);
+    user.role = role;
+    
+    // Sync intent for correct routing in App.jsx
+    if (role === 'organisation_owner') {
+      user.intent = 'organisation';
+      if (user.orgOnboardingStage < 5) user.orgOnboardingStage = 5; // Skip onboarding for dev
+    } else {
+      user.intent = 'professional';
+      if (user.profOnboardingStage < 4) user.profOnboardingStage = 4; // Skip onboarding for dev
+    }
+    
+    await user.save();
+    res.json({ message: `Role updated to ${role} successfully.`, user });
+  } catch (error) { res.status(500).json({ message: 'Server error' }); }
 });
 
 module.exports = router;

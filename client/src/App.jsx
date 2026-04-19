@@ -13,6 +13,10 @@ import Stage1BasicDetails from './pages/onboarding/Stage1BasicDetails';
 import Stage2RoleClaim from './pages/onboarding/Stage2RoleClaim';
 import Stage3DocumentUpload from './pages/onboarding/Stage3DocumentUpload';
 import Stage4DomainVerification from './pages/onboarding/Stage4DomainVerification';
+import ProfessionalOnboarding from './pages/onboarding/professional/ProfessionalOnboarding';
+import ProfStage1Basic from './pages/onboarding/professional/ProfStage1Basic';
+import ProfStage2Skills from './pages/onboarding/professional/ProfStage2Skills';
+import ProfStage3Social from './pages/onboarding/professional/ProfStage3Social';
 
 // Helper: determine which page a user should be on
 function getUserRoute(user) {
@@ -22,6 +26,9 @@ function getUserRoute(user) {
   if (!user.intent) return '/welcome';
   if (user.intent === 'organisation' && user.orgOnboardingStage < 5) {
     return `/onboarding/stage${user.orgOnboardingStage}`;
+  }
+  if (user.intent === 'professional' && user.profOnboardingStage < 4) {
+    return `/professional-onboarding/stage${user.profOnboardingStage}`;
   }
   return `/dashboard/${user.intent}`;
 }
@@ -102,6 +109,19 @@ function App() {
               : <Navigate to={target} />) 
                  : <Navigate to="/login" />
           } />
+
+          {/* Professional Onboarding Stages */}
+          <Route path="/professional-onboarding" element={<ProfessionalOnboarding user={user} setUser={setUser} />}>
+            <Route path="stage1" element={
+              user?.profOnboardingStage === 1 ? <ProfStage1Basic user={user} setUser={setUser} /> : <Navigate to={target} />
+            } />
+            <Route path="stage2" element={
+              user?.profOnboardingStage === 2 ? <ProfStage2Skills user={user} setUser={setUser} /> : <Navigate to={target} />
+            } />
+            <Route path="stage3" element={
+              user?.profOnboardingStage === 3 ? <ProfStage3Social user={user} setUser={setUser} /> : <Navigate to={target} />
+            } />
+          </Route>
 
           <Route path="/dashboard/organisation" element={
             user ? (user.faceVerified && user.documentVerified && user.intent === 'organisation' && user.orgOnboardingStage >= 3

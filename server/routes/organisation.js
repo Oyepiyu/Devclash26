@@ -71,16 +71,27 @@ router.post('/stage1', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Organisation already exists for this user' });
     }
 
+    // Automatic Domain Check Logic (FEATURE 1: OWNER VERIFICATION)
+    const emailDomain = req.user.email.split('@')[1];
+    const websiteDomain = website ? website.replace(/https?:\/\/|www\./g, '').split('/')[0] : '';
+    
+    let verifiedOwnerStatus = 'pending';
+    if (websiteDomain && emailDomain.includes(websiteDomain)) {
+      verifiedOwnerStatus = 'domain_verified';
+    }
+
     const newOrg = new Organisation({
       name, type, industry, foundedYear, size, description,
       address, city, state, pinCode, country,
       website, linkedin, email,
-      ownerId: req.user._id
+      ownerId: req.user._id,
+      verifiedOwnerStatus
     });
 
     await newOrg.save();
 
-    // Update user
+    // Update user role to organisation_owner
+    req.user.role = 'organisation_owner';
     req.user.organisationId = newOrg._id;
     req.user.orgOnboardingStage = 2;
     await req.user.save();
